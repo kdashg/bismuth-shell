@@ -2,4 +2,4 @@
 
 from lib.base import *
 from lib import ee
-from lib import plex
+from lib import plexamp

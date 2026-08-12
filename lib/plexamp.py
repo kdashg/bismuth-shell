@@ -7,6 +7,7 @@ from typing import (
    NamedTuple,
    Callable,
    TypeVar,
+   Any
 )
 from pathlib import Path
 import json
@@ -20,6 +21,9 @@ class OfflineIndex:
    type Guid = Hex[Literal[64]]
    type VPath = str
    type Uri = str
+
+
+   DEFAULT_DIR = Path.home() / 'AppData/Local/Plexamp/Plexamp/Offline'
 
 
    class Stream(TypedDict):
@@ -130,7 +134,7 @@ class OfflineIndex:
 
    # -
 
-   def export_tracks_cp_lines(self, dst: Path, /,
+   def archive_tracks_cp_args(self, dst: Path, *,
                               format: str|None = None,
                               artist=True,
                               bitrate=True,
@@ -151,3 +155,27 @@ class OfflineIndex:
          )
          for t in self.raw['items']
       ]
+
+# -
+
+def archive_offline_cps(dest_dir: Path|str, **kwargs):
+   from lib import base
+
+   dest_dir = Path(dest_dir)
+   dest_dir.mkdir(parents=True, exist_ok=True)
+
+   playlist_dirs = base.ls(OfflineIndex.DEFAULT_DIR)
+   inds = [OfflineIndex(playlist/'index.json') for playlist in playlist_dirs]
+
+   cps = [
+      cp
+      for ind in inds
+         for cp in ind.archive_tracks_cp_args(dest_dir, **kwargs)
+   ]
+   return cps
+
+
+def archive_offline(dest_dir: Path|str, **kwargs):
+   from lib import base
+   cps = archive_offline_cps(dest_dir, **kwargs)
+   base.cp_ask(cps)

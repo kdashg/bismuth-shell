@@ -7,6 +7,10 @@ import math
 import os
 import json
 
+from pprint import pp, pformat, isrecursive, saferepr
+
+import reprlib
+
 # -
 
 tau = math.tau
@@ -69,8 +73,9 @@ def ls(path_or_glob: str|Path = Path()) -> list[Path]:
 
 import shutil
 
-def cp(cmds: list[tuple[Path,Path]], dry=False) -> None:
-   n = len(cmds)
+
+def cp(cps: list[tuple[Path,Path]], dryrun:bool=False) -> None:
+   n = len(cps)
 
    def info(i:int):
       if n > 1000:
@@ -80,15 +85,106 @@ def cp(cmds: list[tuple[Path,Path]], dry=False) -> None:
 
       return f'{i}/{n} {i/n:4.0%}'
 
+   prev_choice = ''
+
+   failed = list[tuple[int,Path,Path]]()
+
    max_info_len = len(info(n))
-   for i,(src,dst) in enumerate(cmds):
+   for i,(src,dest) in enumerate(cps):
       info_padded = ' '*30 + info(i)
       info_padded = info_padded[-max_info_len:]
-      print(f'[{info_padded}] `{src} -> {dst}`...')
-      if not dry:
-         shutil.copy(src, dst)
+
+
+      def msg(*, dest):
+        return f'[{info_padded}] `{src} -> {dest}`...'
+
+
+      def fn_cp(*, dest: Path|None):
+         print(msg(dest=dest))
+         if dest and not dryrun:
+            try:
+               shutil.copy(src, dest)
+            except OSError:
+               failed.append((i,src,dest))
+
+
+      if dest.exists():
+         print(msg(dest=dest))
+
+         for i in range(2,1000):
+            dest_i = dest.with_stem(f'{dest.stem}({i})')
+            if not dest_i.exists():
+               break
+
+         print(
+            '\n'.join([
+               f'Conflict: dest:{dest} already exists! Choose:',
+               f'   1. Overwrite',
+               f'   2. Skip',
+               f'   3. Write instead to {dest_i.name}',
+            ])
+         )
+         while True:
+            choice = input('Choose 1/2/3: ')
+            if choice == '':
+               choice = prev_choice
+            try:
+               choice = int(choice)
+            except ValueError:
+               continue
+
+            if choice == 1:
+               print('Overwriting...')
+               dest = dest
+            elif choice == 2:
+               print('Skipping...')
+               dest = None
+            elif choice == 3:
+               print('Writing instead...')
+               dest = dest_i
+            else:
+               continue
+            prev_choice = choice
+            break
+
+      fn_cp(dest=dest)
 
    print(f'[{info(n)}] Done!')
+
+   if failed:
+      print('Failed:', pformat(failed))
+
+
+# -
+
+def input_choose_lower(chars: str):
+   # Defaults?
+   uppers = [c for c in chars if c.isupper()]
+   assert len(uppers) <= 1, (uppers,chars)
+
+   default:Any = None
+   if len(uppers):
+      (default,) = uppers
+
+   lchars = chars.lower()
+
+   while True:
+      c = input(f'Choose [{chars}]: ')[:1]
+      if c == '':
+         c = default
+      c = c.lower()
+      if c in lchars:
+         return c
+
+# -
+
+def cp_ask(cps: list[tuple[Path,Path]]) -> None:
+   print(f'cps: [len({len(cps)})]')
+   for (src,dest) in cps:
+      print(f'   {src} -> {dest}')
+
+   if input_choose_lower('Yn') == 'y':
+      return cp(cps)
 
 # -
 
@@ -129,9 +225,6 @@ def show(v, /) -> None:
 
 # -
 
-from pprint import pp, pformat, isrecursive, saferepr
-
-import reprlib
 def rep(v, *, maxlevel=6, maxtuple=6, maxlist=6, maxarray=5, maxdict=4,
           maxset=6, maxfrozenset=6, maxdeque=6, maxstring=30, maxlong=40,
           maxother=30, fillvalue='...', indent=None) -> str:
