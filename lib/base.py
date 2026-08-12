@@ -58,12 +58,37 @@ def lsi(path_or_glob: str|Path = Path()) -> Iterable[Path]:
    if isinstance(path_or_glob, str) and '*' in path_or_glob:
       glob = path_or_glob
       return list(Path().glob(glob))
-   
+
    p = Path(path_or_glob)
    return list(p.iterdir())
 
 def ls(path_or_glob: str|Path = Path()) -> list[Path]:
    return list(lsi(path_or_glob))
+
+# -
+
+import shutil
+
+def cp(cmds: list[tuple[Path,Path]], dry=False) -> None:
+   n = len(cmds)
+
+   def info(i:int):
+      if n > 1000:
+         return f'{i}/{n} {i/n:7.2%}' # Percent of a percent is enough.
+      if n > 100:
+         return f'{i}/{n} {i/n:6.1%}'
+
+      return f'{i}/{n} {i/n:4.0%}'
+
+   max_info_len = len(info(n))
+   for i,(src,dst) in enumerate(cmds):
+      info_padded = ' '*30 + info(i)
+      info_padded = info_padded[-max_info_len:]
+      print(f'[{info_padded}] `{src} -> {dst}`...')
+      if not dry:
+         shutil.copy(src, dst)
+
+   print(f'[{info(n)}] Done!')
 
 # -
 

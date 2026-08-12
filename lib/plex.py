@@ -31,7 +31,7 @@ class OfflineIndex:
       selected: bool
       displayTitle: str
 
-   
+
    class Part(TypedDict):
       streams: list['OfflineIndex.Stream']
       id: int
@@ -126,8 +126,7 @@ class OfflineIndex:
 
    def path_from_item(self, t: Item) -> Path:
       stem = t['guid']
-      ext = t['media'][0]['container']
-      return self.p_json.parent / f'{stem}.{ext}'
+      return self.p_json.parent / stem
 
    # -
 
