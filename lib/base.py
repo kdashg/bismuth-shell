@@ -1,15 +1,21 @@
 #! /usr/bin/env python3
 
-from pathlib import Path
-from typing import Iterable, Callable, Any, TypeVar
 
+import json
 import math
 import os
-import json
-
+from pathlib import Path
 from pprint import pp, pformat, isrecursive, saferepr
-
 import reprlib
+import subprocess
+from typing import (
+   Iterable,
+   Callable,
+   Any,
+   TypeVar,
+   Sequence,
+   NamedTuple
+)
 
 # -
 
@@ -68,6 +74,27 @@ def lsi(path_or_glob: str|Path = Path()) -> Iterable[Path]:
 
 def ls(path_or_glob: str|Path = Path()) -> list[Path]:
    return list(lsi(path_or_glob))
+
+# -
+
+type Cmd = tuple|list
+
+def parg(arg: Any) -> str:
+   s = str(arg)
+   if ' ' in s:
+      if s[0] == s[-1] and s[0] in '\'"':
+         if not s[1:-1].count(s[0]):
+            return s
+      # Don't try too hard. It's just for display.
+      if '\'' in s:
+         s = '"' + s.replace('"', '\"') + '"'
+      else:
+         s = '\'' + s + '\''
+   return s
+
+
+def pcmd(cmd: Cmd) -> str:
+   return ' '.join([parg(arg) for arg in cmd])
 
 # -
 
@@ -175,6 +202,64 @@ def input_choose_lower(chars: str):
       c = c.lower()
       if c in lchars:
          return c
+
+# -
+
+class RunResult[CmdT](NamedTuple):
+   good: dict[tuple[int,CmdT],subprocess.CompletedProcess]
+   bad: dict[tuple[int,CmdT],Exception|None]
+
+   def __str__(self):
+      return f'RunResult(len(good)={len(self.good)}, len(bad)={len(self.bad)})'
+
+
+def run[T:Cmd](
+      cmds: list[T],
+      preview:bool=True, check:bool=True,
+      **kwargs) -> RunResult[T]:
+   n = len(cmds)
+
+   def progress(i:int):
+      if n > 1000:
+         return f'{i+1}/{n} {i/n:7.2%}' # Percent of a percent is enough.
+      if n > 100:
+         return f'{i+1}/{n} {i/n:6.1%}'
+      return f'{i+1}/{n} {i/n:4.0%}'
+
+   max_progress_len = len(progress(n-1))
+
+   def msg(i, cmd, end='...'):
+      progress_padded = ' '*30 + progress(i)
+      progress_padded = progress_padded[-max_progress_len:]
+      return f'{progress_padded} `{pcmd(cmd)}`{end}'
+
+
+   if preview:
+      print(f'Preview:')
+      for i,cmd in enumerate(cmds, 1):
+         print(f'{i:4}/{n}: `{pcmd(cmd)}`')
+      print(f'Run {n} commands? ', end='')
+      if input_choose_lower('Yn') == 'n':
+         return RunResult({}, {(i,tuple(cmd)):None for i,cmd in enumerate(cmds, 0)})
+      print(f'Running:')
+
+
+   ret = RunResult({},{})
+   for i,cmd in enumerate(cmds, 0):
+      print(msg(i, cmd))
+      try:
+         res = subprocess.run(cmd, check=check, **kwargs)
+      except Exception as e:
+         ret.bad[(i,tuple(cmd))] = e
+         print(f'Warning: -> {e}')
+         continue
+      ret.good[(i,tuple(cmd))] = res
+
+   print(f'[{progress(n)}] Done!')
+
+   if ret.bad:
+      print('Failures:', pformat(ret.bad))
+   return ret
 
 # -
 
